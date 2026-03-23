@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Uncanny Cat Pong</title>
+    <style>
+        body {
+            background: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        canvas {
+            background: #000;
+            border: 2px solid #fff;
+        }
+
+        #scare {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s;
+        }
+
+        #scare img {
+            width: 60vh;
+            height: auto;
+        }
+
+        #tvWrapper {
+            position: absolute;
+            right: 183px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 160px;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #gifTV {
+            width: 140px;
+            height: 140px;
+            object-fit: cover;
+            border: 2px solid white;
+            background: #000;
+            box-shadow: 0 0 10px #fff4;
+            position: relative;
+        }
+
+        #gifTV::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                to bottom,
+                rgba(255, 255, 255, 0.05) 0px,
+                rgba(255, 255, 255, 0.05) 2px,
+                transparent 2px,
+                transparent 4px
+            );
+            mix-blend-mode: soft-light;
+        }
+
+        #channelLabel {
+            color: #fff;
+            font-family: monospace;
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 4px #0f0;
+        }
+
+        #powerButton {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            background: #300;
+            cursor: pointer;
+            box-shadow: 0 0 6px #f004;
+            position: relative;
+        }
+
+        #powerButton::after {
+            content: "";
+            position: absolute;
+            inset: 4px;
+            border-radius: 50%;
+            border-top: 2px solid #fff;
+        }
+
+        #powerButton.on {
+            background: #030;
+            box-shadow: 0 0 8px #0f04;
+        }
+
+        #titleWrapper {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px; /* space between title and cat */
+    pointer-events: none;
+}
+
+#titleFire {
+    font-size: 48px;
+    font-family: "Impact", sans-serif;
+    color: #ffddaa;
+    text-shadow:
+        0 0 10px #ff6600,
+        0 0 20px #ff3300,
+        0 0 30px #ff0000,
+        0 0 40px #ff3300,
+        0 0 55px #ff6600,
+        0 0 75px #ffaa00;
+    animation: fireFlicker 0.12s infinite alternate;
+}
+
+@keyframes fireFlicker {
+    0% {
+        text-shadow:
+            0 0 10px #ff6600,
+            0 0 20px #ff3300,
+            0 0 30px #ff0000,
+            0 0 40px #ff3300,
+            0 0 55px #ff6600,
+            0 0 75px #ffaa00;
+        transform: scale(1.01);
+    }
+    100% {
+        text-shadow:
+            0 0 12px #ff8800,
+            0 0 25px #ff5500,
+            0 0 35px #ff2200,
+            0 0 45px #ff5500,
+            0 0 60px #ff8800,
+            0 0 80px #ffbb00;
+        transform: scale(1.03);
+    }
+}
+
+#crownedCat {
+    height: 60px;
+    image-rendering: pixelated; /* optional if it's a crunchy GIF */
+    filter: drop-shadow(0 0 10px #ff6600);
+}
+
+    </style>
+</head>
+<body>
+
+<canvas id="game" width="1200" height="400"></canvas>
+
+<div id="scare">
+    <img src="uncanny.webp">
+</div>
+
+<div id="tvWrapper">
+    <div id="channelLabel">UNCANNY TV 3</div>
+    <img id="gifTV" src="" alt="Cat TV">
+    <div id="powerButton" class="on"></div>
+</div>
+
+<div id="titleWrapper">
+    <div id="titleFire">UNCANNY CAT PONG</div>
+    <img id="crownedCat" src="peak.gif" alt="Crowned Cat">
+</div>
+
+
+<script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    canvas.height = 600;
+
+    const LEFT_SIDEBAR = 200;
+    const RIGHT_SIDEBAR = 200;
+
+    const paddleHeight = 100;
+    const paddleWidth = 10;
+
+    let leftPaddleY = canvas.height / 2 - paddleHeight / 2;
+    const paddleX = LEFT_SIDEBAR + 10;
+
+    const catBall = new Image();
+    catBall.src = "canny.webp";
+
+    const playerCat = new Image();
+
+    const scareOverlay = document.getElementById("scare");
+
+    /* RESET SOUND */
+    const resetSound = new Audio("meow.mp3");
+    resetSound.volume = 0.8;
+    resetSound.preload = "auto";
+
+    /* JUMPSCARE SOUND */
+    const jumpscareSound = new Audio("hl2-stalker-scream.mp3");
+    jumpscareSound.volume = 1.0;
+    jumpscareSound.preload = "auto";
+
+    /* HIT SOUNDS */
+    const hitSounds = [
+        new Audio("e_s004.ogg"),
+        new Audio("e_s005.ogg"),
+        new Audio("e_s006.ogg"),
+        new Audio("e_s007.ogg"),
+        new Audio("e_s008.ogg"),
+        new Audio("e_s009.ogg")
+    ];
+    hitSounds.forEach(s => { s.volume = 0.7; s.preload = "auto"; });
+
+    function playRandomHit() {
+        const s = hitSounds[Math.floor(Math.random() * hitSounds.length)];
+        s.currentTime = 0;
+        s.play();
+    }
+
+    /* HURT SOUND */
+    const hurtSound = new Audio("mc-hurt.mp3");
+    hurtSound.volume = 1.0;
+    hurtSound.preload = "auto";
+
+    /* BACKGROUND MUSIC */
+    const bgm = new Audio("pixel-peeker-polka-faster.mp3");
+    bgm.volume = 0.4;
+    bgm.loop = true;
+    bgm.preload = "auto";
+
+    let musicStarted = false;
+
+    /* HIGH SCORE */
+    let highScore = 0;
+
+    /* CRT TV */
+    const gifTV = document.getElementById("gifTV");
+    const powerButton = document.getElementById("powerButton");
+
+    const catGifs = ["gif1.gif","gif2.gif","gif3.gif","gif4.gif"];
+
+    let tvOn = true;
+    let gifIntervalId = null;
+
+    function randomizeGif() {
+        if (!tvOn) return;
+        gifTV.style.filter = "grayscale(1) contrast(2)";
+        gifTV.style.opacity = "0.6";
+        setTimeout(() => {
+            gifTV.src = catGifs[Math.floor(Math.random() * catGifs.length)];
+            gifTV.style.filter = "none";
+            gifTV.style.opacity = "1";
+        }, 120);
+    }
+
+    function startGifLoop() {
+        if (gifIntervalId) clearInterval(gifIntervalId);
+        randomizeGif();
+        gifIntervalId = setInterval(randomizeGif, 1200);
+    }
+
+    function stopGifLoop() {
+        if (gifIntervalId) clearInterval(gifIntervalId);
+        gifIntervalId = null;
+        gifTV.src = "";
+    }
+
+    powerButton.addEventListener("click", () => {
+        tvOn = !tvOn;
+        if (tvOn) { powerButton.classList.add("on"); startGifLoop(); }
+        else { powerButton.classList.remove("on"); stopGifLoop(); }
+    });
+
+    startGifLoop();
+
+    /* BALL SETTINGS */
+    let ballX = LEFT_SIDEBAR + (canvas.width - LEFT_SIDEBAR - RIGHT_SIDEBAR) / 2;
+    let ballY = canvas.height / 2;
+    let ballVX = 6;
+    let ballVY = 4;
+    const ballSize = 40;
+
+    const playerSpeed = 7;
+
+    let upPressed = false;
+    let downPressed = false;
+
+    let rally = 0;
+    let hearts = 4;
+    let gameOver = false;
+
+    function updatePlayerCat() {
+        if (hearts === 4) playerCat.src = "full hp.webp";
+        else if (hearts === 3) playerCat.src = "3 hp.png";
+        else if (hearts === 2) playerCat.src = "2 hp.png";
+        else if (hearts === 1) playerCat.src = "1 hp.webp";
+    }
+    updatePlayerCat();
+
+    setInterval(() => {
+        if (!gameOver) {
+            ballVX *= 1.1;
+            ballVY *= 1.1;
+        }
+    }, 3000);
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "ArrowUp") upPressed = true;
+        if (e.key === "ArrowDown") downPressed = true;
+    });
+
+    document.addEventListener("keyup", e => {
+        if (e.key === "ArrowUp") upPressed = false;
+        if (e.key === "ArrowDown") downPressed = false;
+    });
+
+    document.addEventListener("click", () => {
+
+        if (!musicStarted) {
+            bgm.play();
+            musicStarted = true;
+        }
+
+        if (gameOver) {
+            rally = 0; // reset rally ONLY on full reset
+
+            resetSound.currentTime = 0;
+            resetSound.play();
+
+            scareOverlay.style.opacity = 0;
+            gameOver = false;
+            hearts = 4;
+            updatePlayerCat();
+            resetBall(true);
+        }
+    });
+
+    function drawPaddle() {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(paddleX, leftPaddleY, paddleWidth, paddleHeight);
+    }
+
+    function drawBall() {
+        ctx.drawImage(catBall, ballX, ballY, ballSize, ballSize);
+    }
+
+    function drawRally() {
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px Arial";
+        ctx.fillText("Rally: " + rally, LEFT_SIDEBAR + 20, 30);
+    }
+
+    function drawHighScore() {
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px Arial";
+        ctx.fillText("High Score: " + highScore, 40, 80);
+    }
+
+    function drawHearts() {
+        ctx.fillStyle = "red";
+        ctx.font = "28px Arial";
+        ctx.fillText("❤".repeat(hearts), 40, 40);
+    }
+
+    function drawPlayerCat() {
+        ctx.drawImage(playerCat, 30, canvas.height / 2 - 80, 140, 140);
+    }
+
+    function drawSidebarDividers() {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(LEFT_SIDEBAR, 0, 2, canvas.height);
+        ctx.fillRect(canvas.width - RIGHT_SIDEBAR, 0, 2, canvas.height);
+    }
+
+    function triggerGameOver() {
+        gameOver = true;
+        jumpscareSound.currentTime = 0;
+        jumpscareSound.play();
+        scareOverlay.style.opacity = 1;
+    }
+
+    function loseHeart() {
+        hearts--;
+        hurtSound.currentTime = 0;
+        hurtSound.play();
+        updatePlayerCat();
+
+        if (hearts <= 0) triggerGameOver();
+        else resetBall(true);
+    }
+
+    function resetBall(starting = false) {
+        ballX = LEFT_SIDEBAR + (canvas.width - LEFT_SIDEBAR - RIGHT_SIDEBAR) / 2;
+        ballY = canvas.height / 2;
+        ballVX = 6;
+        ballVY = 4 * (Math.random() > 0.5 ? 1 : -1);
+    }
+
+    function update() {
+        if (gameOver) return;
+
+        if (upPressed && leftPaddleY > 0) leftPaddleY -= playerSpeed;
+        if (downPressed && leftPaddleY < canvas.height - paddleHeight) leftPaddleY += playerSpeed;
+
+        ballX += ballVX;
+        ballY += ballVY;
+
+        if (ballY <= 0 || ballY + ballSize >= canvas.height) {
+            ballVY = -ballVY;
+            playRandomHit();
+        }
+
+        if (
+            ballX <= paddleX + paddleWidth &&
+            ballX + ballSize >= paddleX &&
+            ballY + ballSize >= leftPaddleY &&
+            ballY <= leftPaddleY + paddleHeight
+        ) {
+            ballVX = -ballVX;
+            rally++;
+
+            if (rally > highScore) highScore = rally;
+
+            playRandomHit();
+        }
+
+        if (ballX + ballSize >= canvas.width - RIGHT_SIDEBAR) {
+            ballVX = -ballVX;
+            playRandomHit();
+        }
+
+        if (ballX < LEFT_SIDEBAR) loseHeart();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        drawSidebarDividers();
+        drawPlayerCat();
+        drawHearts();
+        drawHighScore();
+
+        drawPaddle();
+        drawBall();
+        drawRally();
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    loop();
+</script>
+
+</body>
+</html>
