@@ -335,7 +335,7 @@
     document.addEventListener("click", () => {
 
         if (!musicStarted) {
-            bgm.play();
+            setTimeout(() => bgm.play(), 100);
             musicStarted = true;
         }
 
